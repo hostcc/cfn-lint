@@ -936,9 +936,11 @@ function checkResourceProperty(resourcePropType, ref, key){
             // Expect a single value or object if isPrimitiveProperty == false
             let primTypeOf = typeof ref[key];
             let isPrimTypeOf = (primTypeOf == 'string' || primTypeOf == 'number' || primTypeOf == 'boolean');
-            if((typeof ref[key] == 'object' && !isPrimitiveProperty) || (isPrimTypeOf && isPrimitiveProperty)) {
+            let propertyType = resourcesSpec.getPropertyType(baseResourceType, resourcePropType, key);
+            if (   (typeof ref[key]  == 'object' && !isPrimitiveProperty)
+		|| (typeof ref[key]  == 'object' && propertyType == 'Json')
+		|| (isPrimTypeOf && isPrimitiveProperty)) {
                 placeInTemplate.push(key);
-                let propertyType = resourcesSpec.getPropertyType(baseResourceType, resourcePropType, key);
                 checkProperty(resourcePropType, ref, key, isPrimitiveProperty, propertyType);
                 placeInTemplate.pop();
             }else{
