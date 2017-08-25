@@ -29,11 +29,17 @@ If you get `/usr/bin/env: 'node': No such file or directory` ensure your system 
 
 `cfn-lint validate my_template.yaml --parameters key="my value",key2=value2,key3=3`
 
+`cfn-lint validate my_template.yaml --pseudo AWS::StackName="My-Stack"`
+
+`cfn-lint validate my_template.yaml --parameters key="my value" --pseudo AWS::Region=ap-northeast-1,AWS::AccountId=000000000000`
+
 `cfn-lint docs AWS::Lambda::Function` 
 
 `cfn-lint docs AWS::Lambda::Function.Code`
 
 `cfn-lint docs AWS::Lambda::Function.Code.S3Bucket`
+
+**Note: The order of `--parameters` and `--pseudo` currently matters. This should be addressed in a later release.**
 
 ### Example Output
 ```
@@ -91,6 +97,25 @@ Template invalid!
 
 ### Features that would be nice, but aren't currently possible
 * Detect conditional required properties (Information doesn't exist in AWS Resource Specification)
+
+## Deploying your template
+
+CloudFormation tends to involve a bit of trail and error. To enable quick development, 
+the following method can be used to prevent the annoying 'ROLLBACK' scenarios where the whole stack
+must be deleted and recreated.
+
+Deploy a template with the following content, name it what you want your final stack to be called.
+```yaml
+Resources:
+  MyBucket:
+    Type: AWS::S3::Bucket
+```
+
+After each change to your template, simply update the stack you just created. If the stack failed to deploy
+for some reason you can perform an 'Update Stack' operation, without needing to delete and recreate
+the stack from scratch. You can also use this method to keep parameters populated during the development 
+phase. This method will work using the AWS Console or the CLI tools.
+
 
 ## FAQ
 

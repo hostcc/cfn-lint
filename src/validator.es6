@@ -34,6 +34,29 @@ exports.addParameterValue = function addParameterValue(parameter, value){
     addParameterOverride(parameter, value);
 };
 
+exports.addPseudoValue = function addPseudoValue(parameter, value){
+    // Silently drop requests to change AWS::NoValue
+    if(parameter == 'AWS::NoValue') {
+        return;
+    }
+    // Only process items which are already defined in overrides
+    if(parameter in awsRefOverrides){
+        // Put NotificationARNs in an array if required
+        if(parameter == 'AWS::NotificationARNs'){
+            if(awsRefOverrides['AWS::NotificationARNs'][0] == 'arn:aws:sns:us-east-1:123456789012:MyTopic'){
+                awsRefOverrides['AWS::NotificationARNs'][0] = value;
+            }else{
+                awsRefOverrides['AWS::NotificationARNs'].push(value);
+            }
+        }else{
+            // By default, replace the value
+            awsRefOverrides[parameter] = value;
+        }
+    }else{
+        addError('crit', parameter + " is not an allowed pseudo parameter", ['cli-options'], 'pseudo parameters');
+    }
+};
+
 function addParameterOverride(parameter, value){
     parameterRuntimeOverride[parameter] = value;
 }
@@ -458,12 +481,19 @@ function doIntrinsicJoin(ref, key){
 
 function doIntrinsicGetAtt(ref, key){
     let toGet = ref[key];
-    if(toGet.length != 2){
+    if(toGet.length < 2){
         addError("crit", "Invalid parameters for Fn::GetAtt", placeInTemplate, "Fn::GetAtt");
         return "INVALID_GET_ATT"
     }else{
         if(typeof toGet[0] != "string"){ // TODO Implement unit test for this
             addError("crit", "Fn::GetAtt does not support functions for the logical resource name", placeInTemplate, "Fn::GetAtt");
+        }
+
+        // If we have more than 2 parameters, merge other parameters
+        if(toGet.length > 2){
+            let root = toGet[0];
+            let parts = toGet.slice(1).join('.');
+            toGet = [root, parts];
         }
 
         // The AttributeName could be a Ref, so check if it needs resolving
@@ -575,7 +605,7 @@ function doIntrinsicSub(ref, key){
     }
 
     // Extract the replacement parts
-    let regex = /\${([A-Za-z:.!]+)/gm
+    let regex = /\${([A-Za-z0-9:.!]+)/gm;
     let matches = [];
     let match;
     while (match = regex.exec(replacementStr)) {
@@ -598,14 +628,23 @@ function doIntrinsicSub(ref, key){
                 // Use Fn::GetAtt
                 let parts = m.split('.');
                 replacementVal = fnGetAtt(parts[0], parts[1]);
+                if(replacementVal === null){
+                    addError('crit', `Intrinsic Sub does not reference valid resource attribute '${m}'`, placeInTemplate, 'Fn::Sub');
+                }
             }
         }else{
-            if(definedParams !== null && definedParams.hasOwnProperty(m) && typeof definedParams[m] !== 'string'){
-                definedParams[m] = resolveIntrinsicFunction(definedParams[m], Object.keys(m)[0]);
-                replacementVal = definedParams[m];
+            if(definedParams !== null && definedParams.hasOwnProperty(m)){
+                if(typeof definedParams[m] !== 'string') {
+                    replacementVal = resolveIntrinsicFunction(definedParams[m], Object.keys(m)[0]);
+                }else{
+                    replacementVal = definedParams[m];
+                }
             }else {
                 // Use Ref
                 replacementVal = getRef(m);
+                if(replacementVal === null){
+                    addError('crit', `Intrinsic Sub does not reference valid resource or mapping '${m}'`, placeInTemplate, 'Fn::Sub');
+                }
             }
         }
 
@@ -896,7 +935,10 @@ function checkResourceProperty(resourcePropType, ref, key){
 
     // Using the Key, the the Resource Type, get the expected Property type
     // resourceSpec get type of property using resourceType and property name
-    if(resourcesSpec.isValidProperty(resourcePropType, key)){
+    let isValidProperty = resourcesSpec.isValidProperty(resourcePropType, key);
+    let isCustomPropertyAllowed = resourcesSpec.isAdditionalPropertiesEnabled(resourcePropType);
+
+    if(isValidProperty){
 
         // Check if the property is a string
         let isPrimitiveProperty = resourcesSpec.isPrimitiveProperty(resourcePropType, key);
@@ -948,7 +990,9 @@ function checkResourceProperty(resourcePropType, ref, key){
             }
         }
     }else{
-        addError("crit", `${key} is not a valid property of ${resourcePropType}`, placeInTemplate, resourcePropType);
+        if(!isCustomPropertyAllowed) {
+            addError("crit", `${key} is not a valid property of ${resourcePropType}`, placeInTemplate, resourcePropType);
+        }
     }
 
 }

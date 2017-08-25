@@ -1,12 +1,17 @@
 let specification = require('../data/aws_resources_specification.json');
-let refOverride = require('../data/aws_ref_override.json');
+let resourceRefOverride = require('../data/aws_resource_ref_types.json');
 
 function getResourceType(type){
+    // If the type starts with Custom::, it's a custom resource.
+    if(type.indexOf('Custom::') === 0){
+        return specification.ResourceTypes['AWS::CloudFormation::CustomResource'];
+    }
+    // A normal resource type
     if(specification.ResourceTypes.hasOwnProperty(type)){
         return specification.ResourceTypes[type]
-    }else{
-        return null;
     }
+
+    return null;
 }
 
 function getPropertyType(type){
@@ -38,8 +43,8 @@ function isPropertyTypeFormat(type){
 }
 
 function getRefOverride(resourceType){
-    if(refOverride.hasOwnProperty(resourceType)){
-        return refOverride[resourceType];
+    if(resourceRefOverride.hasOwnProperty(resourceType)){
+        return resourceRefOverride[resourceType];
     }else{
         return null;
     }
@@ -109,10 +114,14 @@ function isSinglePrimitivePropertyType(parentPropertyType, propertyName){
     }
 }
 
+function isAdditionalPropertiesEnabled(resourceType){
+    let spec = getType(resourceType);
+    return (spec.hasOwnProperty('AdditionalProperties') && spec['AdditionalProperties'] === true)
+}
+
 function isPropertyTypeList(parentPropertyType, key){
     // Get the type
     let spec = getType(parentPropertyType);
-
     // Check if Type == List
     return (spec !== null && spec['Properties'][key].hasOwnProperty('Type') && spec['Properties'][key]['Type'] == "List");
 }
@@ -183,3 +192,4 @@ exports.getPropertyType = getPropertyTypeApi;
 exports.getPrimitiveItemType = getPrimitiveItemType;
 exports.isPrimitiveTypeList = isPrimitiveTypeList;
 exports.getRequiredProperties = getRequiredProperties;
+exports.isAdditionalPropertiesEnabled = isAdditionalPropertiesEnabled;
